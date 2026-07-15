@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/user.model.js";
+import prisma from "../prisma/prisma.js";
 import {api_error} from "../utils/errorHandler.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
@@ -26,17 +26,20 @@ export const authMiddleware = asyncHandler(async(req, res, next) => {
           return next(new api_error('Unauthorized: Invalid token', 401));
         }
 
-        const userDoc = await User.findById(decoded.userId).select('_id name email');
-        if (!userDoc) {
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.userId },
+          select: { id: true, email: true, mobileNumber: true },
+        });
+
+        if (!user) {
           console.error('[Auth] user not found for id', decoded.userId);
           throw new api_error("Unauthorized: User not found", 401);
         }
 
-        // Normalize req.user to a plain object to avoid Mongoose document quirks downstream
         req.user = {
-          id: userDoc._id.toString(),
-          email: userDoc.email,
-          name: userDoc.name,
+          id: user.id,
+          email: user.email,
+          mobileNumber: user.mobileNumber,
         };
 
         console.log('[Auth] authenticated user', req.user.id);

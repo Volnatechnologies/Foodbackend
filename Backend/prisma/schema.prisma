@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  USER
+}
+
+enum RestaurantType {
+  RESTAURANT
+  CAFE
+  CLOUD_KITCHEN
+  FOOD_TRUCK
+}
+
+enum RestaurantStatus {
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_VERIFICATION
+  ACTIVE
+  REJECTED
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model User {
+  id             String  @id @default(cuid())
+  mobileNumber   String  @unique
+  email          String? @unique
+  password       String
+  role           Role    @default(OWNER)
+  mobileVerified Boolean @default(false)
+
+  restaurant Restaurant?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+model Restaurant {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  restaurantName String
+  restaurantType RestaurantType
+
+  contactNumber String @unique
+  email         String @unique
+
+  fssaiNumber String?
+
+  establishedYear Int?
+
+  addressLine String?
+  city        String?
+  state       String?
+  pincode     String?
+
+  latitude  Float?
+  longitude Float?
+
+  cuisineTypes String[]
+
+  status RestaurantStatus @default(IN_PROGRESS)
+
+  currentStep Int @default(1)
+
+  businessHours BusinessHour[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([currentStep])
+  @@index([city])
+  @@index([restaurantType])
+}
+
+model BusinessHour {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  dayOfWeek DayOfWeek
+
+  openTime  String?
+  closeTime String?
+
+  closed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, dayOfWeek])
+  @@index([restaurantId])
+}

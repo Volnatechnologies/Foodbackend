@@ -1,7 +1,7 @@
-import User from "../models/user.model.js";
 import { api_error } from "../utils/errorHandler.js";
 import asyncHandler from "../utils/asyncHandler.js";
-
+import prisma from "../prisma/prisma.js"
+import { comparePassword, generateAccessToken, hashPassword } from "../utils/userMethods.js";
 
 export const register = asyncHandler(async (req, res, next) => {
     const { mobileNumber, password, email, role} = req.body;
@@ -16,11 +16,13 @@ export const register = asyncHandler(async (req, res, next) => {
         throw new api_error(400, "password is required");
     }
 
-    const existingUser = await User.findOne({
-        $or: [
-            { email },
-            { mobileNumber }
-        ]
+    const existingUser = await prisma.user.findFirst({
+        where: {
+            OR: [
+                { email },
+                { mobileNumber }
+            ]
+    }
     });
     if(existingUser){
         if (existingUser.email === email) {
@@ -32,8 +34,12 @@ export const register = asyncHandler(async (req, res, next) => {
         }
     }
 
-    const user = await User.create({ mobileNumber, password, email, role });
-    const token = user.generateAccessToken();
+    const hashedPassword = await hashPassword(password);
+
+    const user = await prisma.user.create({
+        data: { mobileNumber, password: hashedPassword, email, role }
+    });
+    const token = generateAccessToken(user);
 
     res.status(201)
     .cookie("accessToken", token, {
@@ -47,7 +53,7 @@ export const register = asyncHandler(async (req, res, next) => {
         message: "User registered successfully",
         data: {
             user: {
-                id: user._id,
+                id: user.id,
                 email: user.email,
                 mobileNumber: user.mobileNumber,
                 role: user.role,
@@ -65,23 +71,25 @@ export const login = asyncHandler(async (req, res, next) => {
     if(!password){
         throw new api_error(400, "password is required");
     }
-    
-    const user = await User.findOne({
-        $or: [
-            { email },
-            { mobileNumber }
-        ]
+
+    const user = await prisma.user.findFirst({
+        where: {
+            OR: [
+                { email },
+                { mobileNumber }
+            ]
+        }
     });
     if (!user) {
         throw new api_error(401, "Invalid email or mobileNumber");
     }
 
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await comparePassword(password, user);
     if (!isMatch) {
         throw new api_error(401, "Invalid email or password");
     }
 
-    const token = user.generateAccessToken();
+    const token = generateAccessToken(user);
 
     res.status(200)
     .cookie("accessToken", token, {
@@ -95,14 +103,14 @@ export const login = asyncHandler(async (req, res, next) => {
         message: "User logged in successfully",
         data: {
             user: {
-                id: user._id,
+                id: user.id,
                 email: user.email,
                 mobileNumber: user.mobileNumber,
                 role: user.role,
             },
             token,
         },
-    })
+})
 })
 
 export const logout = asyncHandler(async (req, res, next) => {
