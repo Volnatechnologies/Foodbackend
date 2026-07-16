@@ -19,6 +19,9 @@ app.get("/", (req, res) => {
 import authRoutes from "./src/routes/auth.route.js"
 app.use("/api/v1/auth", authRoutes)
 
+import restaurantRoutes from "./src/routes/restaurant.routes.js"
+app.use("/api/v1/restaurant", restaurantRoutes)
+
 httpServer.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`)
 })

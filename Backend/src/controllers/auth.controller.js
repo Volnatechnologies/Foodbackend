@@ -1,127 +1,117 @@
-import { api_error } from "../utils/errorHandler.js";
+import prisma from "../prisma/prisma.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import prisma from "../prisma/prisma.js"
-import { comparePassword, generateAccessToken, hashPassword } from "../utils/userMethods.js";
+import { api_error } from "../utils/errorHandler.js";
+import {
+    comparePassword,
+    generateAccessToken,
+    hashPassword,
+} from "../utils/userMethods.js";
 
-export const register = asyncHandler(async (req, res, next) => {
-    const { mobileNumber, password, email, role} = req.body;
-
-    if(!mobileNumber){
-        throw new api_error(400, "Mobile number is required");
-    }
-    if(!email){
-        throw new api_error(400, "email is required");
-    }
-    if(!password){
-        throw new api_error(400, "password is required");
-    }
-
-    const existingUser = await prisma.user.findFirst({
-        where: {
-            OR: [
-                { email },
-                { mobileNumber }
-            ]
-    }
-    });
-    if(existingUser){
-        if (existingUser.email === email) {
-            throw new api_error(400, "Email already exists");
-        }
-
-        if (existingUser.mobileNumber === mobileNumber) {
-            throw new api_error(400, "Mobile number already exists");
-        }
-    }
-
-    const hashedPassword = await hashPassword(password);
-
-    const user = await prisma.user.create({
-        data: { mobileNumber, password: hashedPassword, email, role }
-    });
-    const token = generateAccessToken(user);
-
-    res.status(201)
-    .cookie("accessToken", token, {
+const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000
-    })
-    .json({
-        success: true,
-        message: "User registered successfully",
-        data: {
-            user: {
-                id: user.id,
-                email: user.email,
-                mobileNumber: user.mobileNumber,
-                role: user.role,
-            },
-            token,
-        },
-    })
-})
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+};
 
-export const login = asyncHandler(async (req, res, next) => {
-    const { mobileNumber, email, password } = req.body;
-    if(!mobileNumber && !email){
-        throw new api_error(400, "Please provide either email or mobileNumber");
+export const register = asyncHandler(async (req, res) => {
+    let { mobileNumber, email, password } = req.body;
+
+    mobileNumber = mobileNumber?.trim();
+    email = email?.trim().toLowerCase();
+
+    if (!mobileNumber || !email || !password) {
+        throw new api_error(400, "Mobile number, email and password are required");
     }
-    if(!password){
-        throw new api_error(400, "password is required");
+
+    try {
+        const user = await prisma.user.create({
+            data: {
+                mobileNumber,
+                email,
+                password: await hashPassword(password),
+                // role omitted → Prisma assigns OWNER
+            },
+        });
+
+        const token = generateAccessToken(user);
+
+        return res
+            .status(201)
+            .cookie("accessToken", token, cookieOptions)
+            .json({
+                success: true,
+                message: "User registered successfully",
+                data: {
+                    user: {
+                        id: user.id,
+                        email: user.email,
+                        mobileNumber: user.mobileNumber,
+                        role: user.role,
+                    },
+                    token,
+                },
+            });
+    } catch (err) {
+        if (err.code === "P2002") {
+            const field = err.meta?.target?.[0];
+
+            throw new api_error(
+                409,
+                `${field === "mobileNumber" ? "Mobile number" : "Email"} already exists`
+            );
+        }
+
+        throw err;
+    }
+});
+
+export const login = asyncHandler(async (req, res) => {
+    let { email, mobileNumber, password } = req.body;
+
+    email = email?.trim().toLowerCase();
+    mobileNumber = mobileNumber?.trim();
+
+    if ((!email && !mobileNumber) || !password) {
+        throw new api_error(
+            400,
+            "Email/mobile number and password are required"
+        );
     }
 
     const user = await prisma.user.findFirst({
-        where: {
-            OR: [
-                { email },
-                { mobileNumber }
-            ]
-        }
+        where: email ? { email } : { mobileNumber },
     });
-    if (!user) {
-        throw new api_error(401, "Invalid email or mobileNumber");
-    }
 
-    const isMatch = await comparePassword(password, user);
-    if (!isMatch) {
-        throw new api_error(401, "Invalid email or password");
+    if (!user || !(await comparePassword(password, user))) {
+        throw new api_error(401, "Invalid credentials");
     }
 
     const token = generateAccessToken(user);
 
-    res.status(200)
-    .cookie("accessToken", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000
-    })
-    .json({
-        success: true,
-        message: "User logged in successfully",
-        data: {
-            user: {
-                id: user.id,
-                email: user.email,
-                mobileNumber: user.mobileNumber,
-                role: user.role,
+    return res
+        .status(200)
+        .cookie("accessToken", token, cookieOptions)
+        .json({
+            success: true,
+            message: "User logged in successfully",
+            data: {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    mobileNumber: user.mobileNumber,
+                    role: user.role,
+                },
+                token,
             },
-            token,
-        },
-})
-})
+        });
+});
 
-export const logout = asyncHandler(async (req, res, next) => {
-    res.clearCookie("accessToken", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    });
-    res.status(200)
-    .json({
+export const logout = asyncHandler(async (req, res) => {
+    res.clearCookie("accessToken", cookieOptions);
+
+    return res.status(200).json({
         success: true,
         message: "User logged out successfully",
-    })
-})
+    });
+});
