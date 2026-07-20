@@ -3,9 +3,10 @@
 
 // Get a free hosted Postgres database in seconds: `npx create-db`
 // npx prisma migrate dev --name init
-RESTAURANT
+
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {
@@ -46,8 +47,8 @@ enum DayOfWeek {
 
 model User {
   id             String  @id @default(cuid())
-  mobileNumber   String  
-  email          String? 
+  mobileNumber String @unique
+  email String? @unique
   password       String
   role           Role    @default(OWNER)
   mobileVerified Boolean @default(false)
@@ -91,6 +92,7 @@ model Restaurant {
   currentStep Int @default(1)
 
   businessHours BusinessHour[]
+  documents     RestaurantDocument?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -99,6 +101,23 @@ model Restaurant {
   @@index([currentStep])
   @@index([city])
   @@index([restaurantType])
+}
+
+model RestaurantDocument {
+  id String @id @default(cuid())
+
+  restaurantId String @unique
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  fssaiCertificateUrl String
+  gstCertificateUrl   String?
+  logoUrl             String?
+  bannerUrl           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId])
 }
 
 model BusinessHour {

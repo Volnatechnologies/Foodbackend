@@ -6,7 +6,13 @@ export const restaurantMiddleware = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
 
     const restaurant = await prisma.restaurant.findUnique({
-        where: { id },
+        where: {
+            id,
+        },
+        select: {
+            id: true,
+            userId: true,
+        },
     });
 
     if (!restaurant) {
@@ -20,7 +26,7 @@ export const restaurantMiddleware = asyncHandler(async (req, res, next) => {
         );
     }
 
-    req.restaurant = restaurant;
+    req.restaurantId = restaurant.id;
 
     next();
 });
